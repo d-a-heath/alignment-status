@@ -1,0 +1,273 @@
+---
+title: "Alignment Status"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook for trialing the data cleaning/processing/analysis for the project "Status and Conversational Convergence"
+
+David Heath
+
+The goal of this notebook is to extract transcript data from the CANDOR dataset and convert those transcripts into numerical indexes for Recurrence Quantification Analysis using the crqa package.
+
+#Set Up
+```{r}
+library(writexl)
+library(readxl)
+library(crqa)
+
+#clear workspace
+
+rm(list=ls())
+
+#Set Working Directory
+
+#setwd(D:/CANDOR)
+setwd("C:/Users/daheath/OneDrive - The University of Memphis/Heath/Alignment Status/CANDOR/cliffhanger transcripts")
+
+
+```
+
+
+
+#Data Processing
+
+Here we are going through the CANDOR dataset files (now stored on Lab Team drive (see PATH above)), reading each transcript (currently using the cliffhanger version), separating the transcript into individual words, and then indexing those words. This reads a \*.csv file and outputs a \*.txt file containing the transcript as raw text and a \*.csv file containing the word-level transcript with index numbers. This new \*.csv file can be used by the crqa package. 
+
+Might be able to make a simpler version that can go from csv to csv w/o intermediary txt file?
+
+##Extract text
+
+```{r}
+# Specify the directory containing the CSV files
+
+#this is where the dataset lives
+
+csv.directory <- getwd()
+
+# List all CSV files in the directory
+csv.files <- list.files(path = csv.directory,
+                        pattern = "transcript_cliffhanger.csv",
+                        full.names = TRUE,
+                        recursive = TRUE,
+                        include.dirs = TRUE)
+
+# Initialize an empty list to store data frames
+data.list <- list()
+
+# Loop through each CSV file and read it into a data frame
+for (file in csv_files) {
+  data <- read.csv(file)
+  data.list[[file]] <- data
+  save.path <- gsub("transcript_cliffhanger.csv", "",file)
+  output.file <- file.path(save.path,"/transcript_cliffhanger.txt")
+  string.data <- data$utterance
+  
+  # Write the string data to a text file, one entry per line
+  writeLines(as.character(string.data), con = output.file)
+  }
+```
+
+##Asign Indexes & Write New File
+
+```{r}
+# convert to numerical indexes
+
+#This uses the SAME directory as chuck above.
+#If running only this chunk, delete # below
+
+#this is where the dataset lives
+#csv_directory <- "D:/CANDOR"
+
+#this is where our test set lives
+#csv_directory <- "C:/Users/daheath/OneDrive - The University of Memphis/Heath/CANDOR test crqa"
+
+# List all CSV files in the directory
+txt.files <- list.files(path = csv.directory,
+                        pattern = "transcript_cliffhanger.txt",
+                        full.names = TRUE,
+                        recursive = TRUE,
+                        include.dirs = TRUE)
+
+# Initialize an empty list to store data frames
+txt.list <- list()
+
+# Loop through each CSV file and read it into a data frame
+for (file in txt.files) {
+  
+  #read text file
+  txt.data <- readLines(file) 
+  txt.list[[file]] <- txt.data
+  
+  #combining into single string
+  txt.combined <- paste(txt.data, collapse = " ") 
+  
+  #split text into words
+  words<- unlist(strsplit(txt.combined, "\\s+")) 
+  
+  #remove punct, convert to lowercase
+  clean.words <- tolower(gsub("[[:punct:]]", "", words)) 
+  
+  # Create a named vector where each unique word gets a unique index
+  unique.words <- unique(clean.words)
+  word.indices <- setNames(seq_along(unique.words), unique.words)
+  
+  # Map the original words to their respective indices
+  indexed.vector <- word.indices[clean_words]
+  
+  # get file path
+  txt.save.path <- gsub("transcript_cliffhanger.txt", "",file)
+  
+  # save the unique word-to-index mapping to a file
+  txt.output.file <- file.path(txt.save.path, "transcript_cliffhanger_indexed.csv")
+  write.csv(data.frame(Word = words, Index = indexed_vector),
+            file = txt.output.file, row.names = FALSE)
+  #writeLines(as.character(indexed_vector), con = txt_output_file)
+  
+}
+
+```
+
+#Recurrence Quantification Analysis
+
+```{r}
+#this is a test crqa script to
+#run an autoreccurance on a CANDOR 
+#transcript, using the cliffhanger
+#version
+#code adapted from Alex Paxton's crqa tutorial
+
+#This uses the SAME directory as chuck above.
+#If running only this chunk, delete # below
+
+#this is where the dataset lives
+#csv_directory <- "D:/CANDOR"
+
+#this is where our test set lives
+#csv_directory <- "C:/Users/daheath/OneDrive - The University of Memphis/Heath/CANDOR test crqa"
+
+#### ind = indexed #### 
+
+# List all CSV files in the directory
+ind.files <- list.files(path = csv.directory,
+                        pattern = "transcript_cliffhanger_indexed.csv",
+                        full.names = TRUE,
+                        recursive = TRUE,
+                        include.dirs = TRUE)
+
+# Initialize an empty list to store data frames
+ind.list <- list()
+
+# Create df for storing RQA outputs  
+rqa.metrics <- data.frame(matrix(nrow=1,ncol=10), c("CONVO_ID",
+  "RR",
+  "DET",
+  "NRLINE",
+  "maxL",
+  "L",
+  "ENTR",
+  "rENTR",
+  "LAM",
+  "TT"))
+
+metric.names<-`c("CONVO_ID",
+  "RR",
+  "DET",
+  "NRLINE",
+  "maxL",
+  "L",
+  "ENTR",
+  "rENTR",
+  "LAM",
+  "TT"))
+
+colnames(rqa_metrics) <- metric.names 
+
+# Loop through each CSV file and read it into a data frame
+for (file in ind.files) {
+  
+  #get CONVO ID 
+  convoID.left.extract <- gsub("C:/Users/daheath/OneDrive - The University of Memphis/","",file)
+  convoID <- gsub("/CANDOR test crqa/transcript_cliffhanger_indexed.csv", "", convoID.left.extract)
+
+  # set the Theiler window parameter for RQA (should be 1 to ignore LOI in RQA)
+  rec_tw_quantification = 1
+
+  # set radius to be very small for categorical matches
+  rec_categorical_radius = .0001
+
+  ######## 3b. Run recurrence quantification analysis ########
+
+  # run rqa over informative text
+  recurrence_analysis_transcript = crqa(ts1=data[2],
+                                       ts2=data[2],
+                                       delay=0,
+                                       embed=2,
+                                       rescale=0,
+                                       radius=rec_categorical_radius,
+                                       normalize=0,
+                                       mindiagline=2,
+                                       minvertline=2,
+                                       tw=rec_tw_quantification)
+
+  ######## 3c. Create the recurrence plot ########
+
+  # Note: In order to get the line of identity to appear in these plots,
+  #       you must run another `crqa()` function call with a Theiler window
+  #       (`tw`) of 0 in order to preserve the line of identity in the plot.
+
+  # set the Theiler window parameter for RP (should be 0 to keep LOI in RP)
+  rec_tw_plot = 0
+
+  # run rqa over informative with a Theiler window of 0 for plotting
+  recurrence_analysis_plot_transcript = crqa(ts1=data[2],
+                                            ts2=data[2],
+                                            delay=0,
+                                            embed=2,
+                                            rescale=0,
+                                            radius=rec_categorical_radius,
+                                            normalize=0,
+                                            mindiagline=2,
+                                            minvertline=2,
+                                            tw=rec_tw_plot)
+
+
+  # use crqa package's native plotting function
+  par = list(unit = 2, 
+           labelx = "Letter", 
+           labely = "Letter", 
+           cols = "purple", 
+           pcex = 1)
+  plot_rp(recurrence_analysis_plot_transcript$RP, par)
+
+# take a look at the quantification metrics for informative text
+#recurrence_analysis_transcript$RR # rate of recurrence
+#recurrence_analysis_transcript$DET # % determinism
+#recurrence_analysis_transcript$NRLINE # total number of lines on the plot
+#recurrence_analysis_transcript$maxL # maximum line length on plot
+#recurrence_analysis_transcript$L # average line length on plot
+#recurrence_analysis_transcript$ENTR # entropy
+#recurrence_analysis_transcript$rENTR # normalized entropy
+#recurrence_analysis_transcript$LAM # laminarity
+recurrence_analysis_transcript$TT # trapping time
+
+## Next we need to write the values ^ into a data.frame. Ideally WITH the conversation ID. 
+
+rqa_metrics_hold <- cbind(
+  convoID,
+  recurrence_analysis_transcript$RR, # rate of recurrence
+  recurrence_analysis_transcript$DET, # % determinism
+  recurrence_analysis_transcript$NRLINE, # total number of lines on the plot
+  recurrence_analysis_transcript$maxL, # maximum line length on plot
+  recurrence_analysis_transcript$L, # average line length on plot
+  recurrence_analysis_transcript$ENTR, # entropy
+  recurrence_analysis_transcript$rENTR, # normalized entropy
+  recurrence_analysis_transcript$LAM, # laminarity
+  recurrence_analysis_transcript$TT) # trapping time
+
+  for(i in (ind_files)){
+    rqa_metrics <- rbind(rqa_metrics, rqa_metrics_hold)}
+}
+```
+
+Append not working yet - I think I need to add a cbind before rqa_metrics_hold
+
